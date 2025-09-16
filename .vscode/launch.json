@@ -16,7 +16,7 @@
             "type": "chrome",
             "request": "launch",
             "name": "Open triangle.html",
-            "file": "c:\\Users\\YSH\\OneDrive - gc.gachon.ac.kr\\바탕 화면\\Webgl1\\tree.html"
+            "file": "c:\\Users\\YSH\\OneDrive - gc.gachon.ac.kr\\바탕 화면\\Webgl1\\triangle.html"
         },
 
     ]

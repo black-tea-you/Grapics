@@ -52,7 +52,7 @@ window.onload=function intit()
 };
 
 
-    function render(){
-    gl.clear( gl.COLOR_BUFFER_BIT ); 
-    gl.drawArrays( gl.TRIANGLES, 0, 6 );
- }
+//     function render(){
+//     gl.clear( gl.COLOR_BUFFER_BIT ); 
+//     gl.drawArrays( gl.TRIANGLES, 0, 6 );
+// }

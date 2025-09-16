@@ -4,13 +4,21 @@
 <script id="vertex-shader" type="x-shader/x-vertex">
 // vertex shader
  attribute vec4 vPosition;
- attribute vec4 vColor;
- varying vec4 fColor;
+ uniform vec2 uResoluion;
  void
  main()
  {
- fColor= vColor;
- gl_Position= vPosition;
+     // convertthepositionfrompixelsto0.0 to1.0
+    vec2 zeroToOne= vPosition/ vResolution;
+    // convertfrom0->1 to0->2
+    vec2 zeroToTwo= zeroToOne* 2.0;
+    // convertfrom0->2 to-1->+1 (clipspace)
+    vec2 clipSpace= zeroToTwo-1.0;
+    //gl_Position= vec4(clipSpace, 0.0, 1.0);
+    // Togetittobethemoretraditionaltopleft
+    //cornerusedfor2d graphicsAPIswecanjustfliptheclip
+    spaceycoordinate.
+    gl_Position= vec4(clipSpace* vec2(1, -1), 0, 1);
  }
  </script>
  <script id="fragment-shader" type="x-shader/x-fragment">
@@ -28,7 +36,7 @@
  <script type="text/javascript" src="./libs/webgl-utils.js"></script>
  <script type="text/javascript" src="./libs/initShaders.js"></script>
  <script type="text/javascript" src="./libs/MV.js"></script>
- <script type="text/javascript" src="square_color.js"></script>
+ <script type="text/javascript" src="ex6.js"></script>
  </head>
  <body>
  <canvas id="gl-canvas" width="512" height="512">
