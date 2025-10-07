@@ -3,32 +3,34 @@
 <head>
 <script id="vertex-shader" type="x-shader/x-vertex">
 // vertex shader
- attribute vec4 vPosition;
- uniform vec2 uResoluion;
+ attribute vec2 vPosition;
+ uniform vec2 vResolution;
+
+
  void
  main()
  {
-     // convertthepositionfrompixelsto0.0 to1.0
-    vec2 zeroToOne= vPosition/ vResolution;
+    // convertthepositionfrompixelsto0.0 to1.0
+    vec2 zeroToOne= vPosition/vResolution;
     // convertfrom0->1 to0->2
     vec2 zeroToTwo= zeroToOne* 2.0;
     // convertfrom0->2 to-1->+1 (clipspace)
     vec2 clipSpace= zeroToTwo-1.0;
     //gl_Position= vec4(clipSpace, 0.0, 1.0);
     // Togetittobethemoretraditionaltopleft
-    //cornerusedfor2d graphicsAPIswecanjustfliptheclip
-    spaceycoordinate.
+
     gl_Position= vec4(clipSpace* vec2(1, -1), 0, 1);
  }
  </script>
  <script id="fragment-shader" type="x-shader/x-fragment">
  // fragment shager
  precision mediump float;
- varying vec4 fColor;
+ uniform vec4 fColor;
  void
  main()
  {
- gl_FragColor= fColor;
+ gl_FragColor = fColor;
+
  }
 
  </script>

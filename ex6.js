@@ -7,41 +7,43 @@ window.onload=function intit()
     gl = WebGLUtils.setupWebGL( canvas );    
     if (!gl) { alert( "WebGL isn't available" );} 
 
-     var vertices = new Float32Array([
-        10, 20,
-        80, 20,
-        10, 30,
-        10, 30,
-        80, 20,
-        80, 30,
-    ]);
+    //  var vertices = new Float32Array([
+    //     10, 20, 
+    //     80, 20,
+    //     10, 30,
+    //     10, 30,
+    //     80, 20,
+    //     80, 30,
+    // ]);
 
     //  Configure WebGL
     //    
     gl.viewport( 0, 0, canvas.width, canvas.height );
     gl.clearColor( 0.0, 0.0, 0.0, 1.0 );
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
     //  Load shaders and initialize attribute buffers
     var program = initShaders( gl, "vertex-shader", "fragment-shader" );
     gl.useProgram( program );
 
     var VbufferId = gl.createBuffer();
-    gl.bindBuffer( gl.ARRAY_BUFFER, VbufferId );
-    gl.bufferData( gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, VbufferId);
 
     var vPosition = gl.getAttribLocation( program, "vPosition" );
     gl.vertexAttribPointer( vPosition, 2, gl.FLOAT, false, 0, 0 );
     gl.enableVertexAttribArray( vPosition );
 
-     // we added auniformcalled vResolution. 
-    var vResolution = gl.getUniformLocation(program, "vResolution"); 
+    var fcolor = gl.getUniformLocation(program, "fColor");
+    
     // set the resolution
+    // we added auniformcalled vResolution. 
+    var vResolution = gl.getUniformLocation(program, "vResolution"); 
     gl.uniform2f(vResolution, gl.canvas.width, gl.canvas.height);
 
     for(var ii=0; ii<50; ++ii){
         setRectangle(gl,randomInt(300),randomInt(300),randomInt(300),randomInt(300));
 
-        gl.uniform4f(fcolor,Math,random(),Math,random(),Math,random(),1);
+        gl.uniform4f(fcolor,Math.random(),Math.random(),Math.random(),1);
 
         var primitiveType=gl.TRIANGLES;
         var offset=0;
@@ -58,6 +60,17 @@ function randomInt(range)
 function setRectangle(gl,x,y,width,height){
     var x1=x;
     var x2=x+width;
-    vary1=y;
+    var y1=y;
     var y2=y+height;
+
+    var vertices = new Float32Array([
+        x1, y1,
+        x2, y1,
+        x1, y2,
+        x1, y2,
+        x2, y1,
+        x2, y2
+    ]);
+
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
 }
