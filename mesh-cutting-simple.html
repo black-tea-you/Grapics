@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>메쉬 커팅 - 간단 버전</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 18px;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div>⚡ 로딩 중...</div>
+        <div id="loadStatus" style="font-size: 14px; margin-top: 10px;">Three.js 로드 중...</div>
+    </div>
+    
+    <div id="info">
+        <strong>🔪 메쉬 커팅 시스템</strong><br>
+        <small>
+        좌클릭 드래그: 절단<br>
+        우클릭 드래그: 회전<br>
+        휠: 줌
+        </small>
+    </div>
+
+    <!-- 스크립트 로딩 상태 -->
+    <script>
+        console.log('1. HTML 로드 완료');
+        window.scriptsLoaded = { three: false, cannon: false, controls: false };
+        
+        function updateLoadStatus(name, loaded) {
+            window.scriptsLoaded[name] = loaded;
+            const status = document.getElementById('loadStatus');
+            if (loaded) {
+                console.log(`✓ ${name} 로드 완료`);
+            }
+            
+            if (window.scriptsLoaded.three && window.scriptsLoaded.cannon && window.scriptsLoaded.controls) {
+                status.textContent = '초기화 중...';
+                setTimeout(() => {
+                    document.getElementById('loading').classList.add('hidden');
+                }, 500);
+            }
+        }
+    </script>
+
+    <!-- Three.js (로컬) -->
+    <script src="js/three.min.js" 
+            onload="updateLoadStatus('three', true); console.log('2. Three.js 로드:', typeof THREE);" 
+            onerror="console.error('Three.js 로드 실패'); document.getElementById('loadStatus').textContent='Three.js 로드 실패 - 경로 확인 필요';">
+    </script>
+
+    <!-- Cannon.js (CDN) -->
+    <script src="https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.min.js" 
+            onload="updateLoadStatus('cannon', true); console.log('3. Cannon.js 로드:', typeof CANNON);" 
+            onerror="console.error('Cannon.js 로드 실패');">
+    </script>
+
+    <!-- OrbitControls (CDN - 가장 확실) -->
+    <script src="https://unpkg.com/three@0.150.0/examples/js/controls/OrbitControls.js" 
+            onload="updateLoadStatus('controls', true); console.log('4. OrbitControls 로드:', typeof THREE.OrbitControls);" 
+            onerror="console.error('OrbitControls 로드 실패');">
+    </script>
+
+    <!-- 메인 스크립트 -->
+    <script>
+        console.log('5. 메인 스크립트 시작');
+        
+        // 모든 라이브러리가 로드될 때까지 대기
+        function waitForLibraries() {
+            if (typeof THREE === 'undefined') {
+                console.log('Three.js 대기 중...');
+                setTimeout(waitForLibraries, 100);
+                return;
+            }
+            if (typeof CANNON === 'undefined') {
+                console.log('Cannon.js 대기 중...');
+                setTimeout(waitForLibraries, 100);
+                return;
+            }
+            if (typeof THREE.OrbitControls === 'undefined') {
+                console.log('OrbitControls 대기 중...');
+                setTimeout(waitForLibraries, 100);
+                return;
+            }
+            
+            console.log('6. 모든 라이브러리 준비 완료!');
+            initScene();
+        }
+
+        // Scene 초기화
+        function initScene() {
+            console.log('7. Scene 초기화 시작');
+            
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+            
+            const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 50, 200);
+            
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            
+            // 조명
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(50, 100, 50);
+            scene.add(dirLight);
+            
+            // 테스트 큐브
+            const geometry = new THREE.BoxGeometry(50, 50, 50);
+            const material = new THREE.MeshStandardMaterial({ color: 0x80BE1F });
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            
+            // 그리드
+            const gridHelper = new THREE.GridHelper(200, 20);
+            scene.add(gridHelper);
+            
+            console.log('8. Scene 초기화 완료! 렌더링 시작');
+            
+            // 애니메이션
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01;
+                renderer.render(scene, camera);
+            }
+            animate();
+            
+            console.log('✅ 모든 초기화 완료!');
+        }
+
+        // 윈도우 로드 후 시작
+        window.addEventListener('load', () => {
+            console.log('Window load event');
+            waitForLibraries();
+        });
+
+        // 리사이즈
+        window.addEventListener('resize', () => {
+            if (typeof camera !== 'undefined' && typeof renderer !== 'undefined') {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+    </script>
+</body>
+</html>
+

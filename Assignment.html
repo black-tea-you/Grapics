@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>WebGL Windmill - Final Version</title>
+
+    <script id="vertex-shader" type="x-shader/x-vertex">
+        attribute vec4 vPosition;
+        attribute vec4 vColor;
+
+        uniform float theta;
+        uniform float time;
+        uniform int u_mode;
+        uniform float u_perspective_strength;
+        uniform vec3 u_windmill_offset; // 풍차의 위치(offset)를 전달받을 uniform
+        uniform float u_cloud_offset; // 구름별 시작 위치 offset
+
+        varying vec4 fColor;
+        varying float vBlend; // 그라디언트 효과를 위한 varying 변수
+
+        void main() {
+            vec4 pos = vPosition;
+
+            // u_mode가 1일 때 (회전하는 날개)
+            if (u_mode == 1) {
+                // 1. 먼저 원점을 기준으로 회전
+                float s = sin(theta);
+                float c = cos(theta);
+                pos.x = -s * vPosition.y + c * vPosition.x;
+                pos.y =  s * vPosition.x + c * vPosition.y;
+                // 2. 나중에 풍차의 최종 위치(offset)를 더해줌
+                pos.xyz += u_windmill_offset;
+            }
+            // u_mode가 2일 때 (흐르는 물)
+            else if (u_mode == 2) {
+                pos.x = mod(vPosition.x + time, 2.0) - 1.0;
+                gl_PointSize = 8.0;
+            }
+            // u_mode가 3일 때 (노을 배경 그라디언트)
+            else if (u_mode == 3) {
+                // x 좌표를 -1.0~1.0 범위에서 0.0~1.0으로 변환
+                vBlend = (vPosition.x + 1.0) * 0.5;
+            }
+            // u_mode가 4일 때 (이동하는 구름)
+            else if (u_mode == 4) {
+                // 천천히 왼쪽에서 오른쪽으로 이동, offset을 더해서 각 구름마다 다른 시작점
+                float moveX = time * 0.85 + u_cloud_offset;
+                pos.x = vPosition.x + mod(moveX, 3.0) - 1.5;
+            }
+            // u_mode가 0일 때 (고정된 도형)는 JS에서 이미 위치 계산이 끝났으므로 아무것도 하지 않음
+
+            // 원근감 트릭 적용
+            float divisor = 1.0 + pos.z * u_perspective_strength;
+            pos.xy /= divisor;
+
+            gl_Position = pos;
+            fColor = vColor;
+        }
+    </script>
+
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        precision mediump float;
+        varying vec4 fColor;
+        varying float vBlend;
+        
+        void main() {
+            // vBlend 값이 있으면 (노을 배경일 때) 그라디언트 색상 혼합
+            if (vBlend > 0.0) {
+                // 왼쪽(태양): 주황/붉은색, 오른쪽: 하늘색
+                vec4 sunsetColor = vec4(1.0, 0.5, 0.2, 1.0);  // 주황색
+                vec4 skyColor = vec4(0.85, 0.95, 1.0, 1.0);   // 하늘색
+                gl_FragColor = mix(sunsetColor, skyColor, vBlend);
+            } else {
+                gl_FragColor = fColor;
+            }
+        }
+    </script>
+
+    <script type="text/javascript" src="./libs/webgl-utils.js"></script>
+    <script type="text/javascript" src="./libs/initShaders.js"></script>
+    <script type="text/javascript" src="./libs/MV.js"></script>
+    <script type="text/javascript" src="Assignment.js"></script>
+
+</head>
+
+<body>
+    <canvas id="gl-canvas" width="512" height="512"></canvas>
+    <br>
+    <button id="directionButton">회전 방향 바꾸기</button>
+</body>
+
+</html>

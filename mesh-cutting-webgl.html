@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>메쉬 커팅 - 순수 WebGL</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        canvas {
+            display: block;
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        #container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255,255,255,0.95);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            max-width: 300px;
+        }
+        
+        h3 {
+            margin: 0 0 10px 0;
+            color: #667eea;
+        }
+        
+        .stat {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        .stat strong {
+            color: #333;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        
+        .btn-reset {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .btn-wireframe {
+            background: #4dabf7;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="gl-canvas" width="1024" height="768"></canvas>
+    </div>
+    
+    <div id="info">
+        <h3>🔪 WebGL 메쉬 커팅</h3>
+        <div class="stat"><strong>렌더링:</strong> WebGL</div>
+        <div class="stat"><strong>Shader:</strong> 커스텀 GLSL</div>
+        <div class="stat"><strong>정점:</strong> <span id="vertexCount">0</span></div>
+        <div class="stat"><strong>메쉬:</strong> <span id="meshCount">1</span></div>
+        <div class="stat"><strong>FPS:</strong> <span id="fps">60</span></div>
+        <hr style="margin: 10px 0;">
+        <small>
+            좌클릭 드래그: 메쉬 절단<br>
+            우클릭 드래그: 카메라 회전
+        </small>
+    </div>
+    
+    <div id="controls">
+        <button class="btn-reset" onclick="resetScene()">🔄 초기화</button>
+        <button class="btn-wireframe" onclick="toggleWireframe()">🔍 와이어프레임</button>
+    </div>
+
+    <!-- Vertex Shader -->
+    <script id="vertex-shader" type="x-shader/x-vertex">
+        attribute vec4 vPosition;
+        attribute vec4 vColor;
+        
+        uniform mat4 uModelViewMatrix;
+        uniform mat4 uProjectionMatrix;
+        
+        varying vec4 fColor;
+        
+        void main() {
+            gl_Position = uProjectionMatrix * uModelViewMatrix * vPosition;
+            fColor = vColor;
+        }
+    </script>
+
+    <!-- Fragment Shader -->
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        precision mediump float;
+        
+        varying vec4 fColor;
+        
+        void main() {
+            gl_FragColor = fColor;
+        }
+    </script>
+
+    <!-- WebGL 라이브러리 -->
+    <script type="text/javascript" src="libs/webgl-utils.js"></script>
+    <script type="text/javascript" src="libs/InitShaders.js"></script>
+    <script type="text/javascript" src="libs/MV.js"></script>
+
+    <!-- 메인 스크립트 -->
+    <script type="text/javascript">
+        "use strict";
+
+        // WebGL 변수
+        let canvas;
+        let gl;
+        let program;
+
+        // Uniform 위치
+        let uModelViewMatrix;
+        let uProjectionMatrix;
+
+        // 버퍼
+        let vBuffer;
+        let cBuffer;
+
+        // 카메라
+        let eye = vec3(0, 0, 5);
+        let at = vec3(0, 0, 0);
+        let up = vec3(0, 1, 0);
+
+        // 투영
+        let fovy = 45.0;
+        let aspect;
+        let near = 0.1;
+        let far = 100.0;
+
+        // 메쉬 데이터
+        let meshes = [];
+        let wireframeMode = false;
+
+        // 마우스
+        let isDragging = false;
+        let startPoint = null;
+        let endPoint = null;
+        let isRotating = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+        let cameraAngleX = 0;
+        let cameraAngleY = 0;
+
+        // 메쉬 클래스
+        class Mesh {
+            constructor(vertices, color) {
+                this.vertices = vertices; // vec3 배열
+                this.color = color;       // vec4
+                this.velocity = vec3(0, 0, 0);
+                this.position = vec3(0, 0, 0);
+                this.rotation = 0;
+            }
+
+            update(deltaTime) {
+                // 간단한 물리 (중력)
+                this.velocity[1] -= 0.5 * deltaTime;
+                
+                // 위치 업데이트
+                this.position = add(this.position, scale(deltaTime, this.velocity));
+                
+                // 바닥 충돌
+                if (this.position[1] < -3) {
+                    this.position[1] = -3;
+                    this.velocity[1] *= -0.5;
+                    this.velocity[0] *= 0.9;
+                }
+                
+                // 회전
+                this.rotation += 0.5 * deltaTime;
+            }
+
+            getTransformedVertices() {
+                // 변환 적용
+                let transformed = [];
+                for (let v of this.vertices) {
+                    // 회전
+                    let cosR = Math.cos(this.rotation);
+                    let sinR = Math.sin(this.rotation);
+                    let rotated = vec3(
+                        v[0] * cosR - v[2] * sinR,
+                        v[1],
+                        v[0] * sinR + v[2] * cosR
+                    );
+                    // 이동
+                    transformed.push(add(rotated, this.position));
+                }
+                return transformed;
+            }
+        }
+
+        // 초기화
+        window.onload = function init() {
+            console.log('🚀 WebGL 초기화 시작');
+            
+            canvas = document.getElementById("gl-canvas");
+            
+            gl = WebGLUtils.setupWebGL(canvas);
+            if (!gl) {
+                alert("WebGL을 사용할 수 없습니다!");
+                return;
+            }
+
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(0.1, 0.1, 0.18, 1.0);
+            gl.enable(gl.DEPTH_TEST);
+
+            // Shader 프로그램 로드
+            program = initShaders(gl, "vertex-shader", "fragment-shader");
+            gl.useProgram(program);
+
+            // Uniform 위치
+            uModelViewMatrix = gl.getUniformLocation(program, "uModelViewMatrix");
+            uProjectionMatrix = gl.getUniformLocation(program, "uProjectionMatrix");
+
+            // 버퍼 생성
+            vBuffer = gl.createBuffer();
+            cBuffer = gl.createBuffer();
+
+            // Attribute 위치
+            let vPosition = gl.getAttribLocation(program, "vPosition");
+            gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+            gl.vertexAttribPointer(vPosition, 3, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(vPosition);
+
+            let vColor = gl.getAttribLocation(program, "vColor");
+            gl.bindBuffer(gl.ARRAY_BUFFER, cBuffer);
+            gl.vertexAttribPointer(vColor, 4, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(vColor);
+
+            // 초기 메쉬 생성
+            createInitialMesh();
+
+            // 이벤트 리스너
+            setupEventListeners();
+
+            // Aspect ratio
+            aspect = canvas.width / canvas.height;
+
+            console.log('✅ WebGL 초기화 완료');
+            
+            // 렌더링 시작
+            render();
+        }
+
+        function createInitialMesh() {
+            // 사각형 메쉬
+            let vertices = [
+                vec3(-1, 1, 0),
+                vec3(-1, -1, 0),
+                vec3(1, -1, 0),
+                vec3(-1, 1, 0),
+                vec3(1, -1, 0),
+                vec3(1, 1, 0)
+            ];
+            
+            let color = vec4(0.5, 0.75, 0.12, 1.0);
+            meshes.push(new Mesh(vertices, color));
+            
+            updateStats();
+        }
+
+        function setupEventListeners() {
+            canvas.addEventListener('mousedown', function(e) {
+                if (e.button === 0) {
+                    // 좌클릭 - 절단
+                    isDragging = true;
+                    startPoint = getCanvasPoint(e);
+                } else if (e.button === 2) {
+                    // 우클릭 - 회전
+                    isRotating = true;
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                }
+                e.preventDefault();
+            });
+
+            canvas.addEventListener('mousemove', function(e) {
+                if (isDragging && startPoint) {
+                    endPoint = getCanvasPoint(e);
+                } else if (isRotating) {
+                    let deltaX = e.clientX - lastMouseX;
+                    let deltaY = e.clientY - lastMouseY;
+                    
+                    cameraAngleY += deltaX * 0.01;
+                    cameraAngleX += deltaY * 0.01;
+                    
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                }
+            });
+
+            canvas.addEventListener('mouseup', function(e) {
+                if (e.button === 0 && isDragging) {
+                    if (startPoint && endPoint) {
+                        performCut();
+                    }
+                    isDragging = false;
+                    startPoint = null;
+                    endPoint = null;
+                } else if (e.button === 2) {
+                    isRotating = false;
+                }
+            });
+
+            canvas.addEventListener('contextmenu', e => e.preventDefault());
+        }
+
+        function getCanvasPoint(e) {
+            let rect = canvas.getBoundingClientRect();
+            let x = ((e.clientX - rect.left) / canvas.width) * 2 - 1;
+            let y = -((e.clientY - rect.top) / canvas.height) * 2 + 1;
+            return vec2(x, y);
+        }
+
+        function performCut() {
+            console.log('🔪 메쉬 절단 시도');
+            // 간단한 구현: 메쉬를 두 개로 복제
+            if (meshes.length > 0) {
+                let originalMesh = meshes[0];
+                meshes = [];
+                
+                // 왼쪽 절반
+                let vertices1 = [
+                    vec3(-1, 1, 0),
+                    vec3(-1, -1, 0),
+                    vec3(0, -1, 0),
+                    vec3(-1, 1, 0),
+                    vec3(0, -1, 0),
+                    vec3(0, 1, 0)
+                ];
+                let mesh1 = new Mesh(vertices1, vec4(Math.random(), Math.random(), Math.random(), 1));
+                mesh1.velocity = vec3(-0.5, 1, 0);
+                meshes.push(mesh1);
+                
+                // 오른쪽 절반
+                let vertices2 = [
+                    vec3(0, 1, 0),
+                    vec3(0, -1, 0),
+                    vec3(1, -1, 0),
+                    vec3(0, 1, 0),
+                    vec3(1, -1, 0),
+                    vec3(1, 1, 0)
+                ];
+                let mesh2 = new Mesh(vertices2, vec4(Math.random(), Math.random(), Math.random(), 1));
+                mesh2.velocity = vec3(0.5, 1, 0);
+                meshes.push(mesh2);
+                
+                updateStats();
+                console.log('✅ 메쉬 절단 완료');
+            }
+        }
+
+        function resetScene() {
+            meshes = [];
+            createInitialMesh();
+            cameraAngleX = 0;
+            cameraAngleY = 0;
+        }
+
+        function toggleWireframe() {
+            wireframeMode = !wireframeMode;
+        }
+
+        function updateStats() {
+            let totalVertices = 0;
+            meshes.forEach(m => totalVertices += m.vertices.length);
+            
+            document.getElementById('vertexCount').textContent = totalVertices;
+            document.getElementById('meshCount').textContent = meshes.length;
+        }
+
+        let lastTime = 0;
+        let frameCount = 0;
+        let fpsTime = 0;
+
+        function render(time = 0) {
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            let deltaTime = (time - lastTime) / 1000;
+            lastTime = time;
+            
+            // FPS 계산
+            frameCount++;
+            fpsTime += deltaTime;
+            if (fpsTime >= 1.0) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                fpsTime = 0;
+            }
+
+            // 메쉬 업데이트
+            meshes.forEach(mesh => mesh.update(deltaTime));
+
+            // 카메라 설정
+            let radius = 5;
+            eye = vec3(
+                radius * Math.sin(cameraAngleY) * Math.cos(cameraAngleX),
+                radius * Math.sin(cameraAngleX),
+                radius * Math.cos(cameraAngleY) * Math.cos(cameraAngleX)
+            );
+            
+            let modelViewMatrix = lookAt(eye, at, up);
+            let projectionMatrix = perspective(fovy, aspect, near, far);
+
+            gl.uniformMatrix4fv(uModelViewMatrix, false, flatten(modelViewMatrix));
+            gl.uniformMatrix4fv(uProjectionMatrix, false, flatten(projectionMatrix));
+
+            // 모든 메쉬 렌더링
+            meshes.forEach(mesh => renderMesh(mesh));
+
+            // 절단선 그리기
+            if (isDragging && startPoint && endPoint) {
+                renderCutLine();
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        function renderMesh(mesh) {
+            let vertices = mesh.getTransformedVertices();
+            let colors = [];
+            
+            for (let i = 0; i < vertices.length; i++) {
+                colors.push(mesh.color);
+            }
+
+            // 버퍼 업데이트
+            gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, flatten(vertices), gl.DYNAMIC_DRAW);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, cBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, flatten(colors), gl.DYNAMIC_DRAW);
+
+            // 그리기
+            if (wireframeMode) {
+                gl.drawArrays(gl.LINE_LOOP, 0, vertices.length);
+            } else {
+                gl.drawArrays(gl.TRIANGLES, 0, vertices.length);
+            }
+        }
+
+        function renderCutLine() {
+            let vertices = [
+                vec3(startPoint[0] * 3, startPoint[1] * 3, 0),
+                vec3(endPoint[0] * 3, endPoint[1] * 3, 0)
+            ];
+            
+            let colors = [
+                vec4(1, 0, 0, 1),
+                vec4(1, 0, 0, 1)
+            ];
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, vBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, flatten(vertices), gl.DYNAMIC_DRAW);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, cBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, flatten(colors), gl.DYNAMIC_DRAW);
+
+            gl.drawArrays(gl.LINES, 0, 2);
+        }
+    </script>
+</body>
+</html>
+
